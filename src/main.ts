@@ -1,67 +1,65 @@
-// For more information, see https://crawlee.dev/
 import { PlaywrightCrawler, Dataset } from 'crawlee';
 
-// PlaywrightCrawler crawls the web using a headless
-// browser controlled by the Playwright library.
 const crawler = new PlaywrightCrawler({
-    // Use the requestHandler to process each of the crawled pages.
-    async requestHandler({ page, log, pushData }) {
+    async requestHandler({ page, enqueueLinks, log }) {
         log.info(`Processing ${page.url()}`);
 
-        await page.locator('.tableauPlaceholder').focus();
-        log.info('focus on tableau');
+        // choose property or list page type
+        if (page.url().includes('properties')) {
+            // list page type
+            log.info(`Extracting page links`);
 
-        const iframeElement = await page.locator('iframe.tableauViz').elementHandle()
-        if (iframeElement == null) {
-            log.info('no iframe found')
+            await enqueueLinks({
+                selector: 'crx-property-tile-aggregate a.cui-card-cover-link',
+                baseUrl: new URL(page.url()).origin,
+            });
+            
+            await enqueueLinks({
+                selector: 'crx-pager-alt a',
+                baseUrl: new URL(page.url()).origin,
+            });
         } else {
-            const f = await iframeElement.contentFrame();
-            if (f == null) {
-                log.info('iframe has no content')
-            } else {
-                await f.waitForURL(new RegExp('.*tableau.*', 'i'));
-                log.info('frame loaded');
-        
-                const frame = page.frame('.tableauViz');
-                log.info('extractiong from frame');
-        
-                // Wait for the select box to be visible
-                await frame?.waitForSelector(
-                    'div.tabComboBoxNameContainer',
-                    { state: 'visible' });
-                log.info(`Option visible`);
-        
-                // Click on the select box
-                await page.click('div.tabComboBoxNameContainer');
-                log.info(`Dropdown clicked`);
-        
-                // Select an option (adjust the selector as needed)
-                await page.selectOption('div.tabComboBoxNameContainer', { value: 'option1' });
-                log.info(`Option 1 selected`);
-        
-                // Wait for 1 second after selecting the option
-                await page.waitForTimeout(1000);
-        
-                // Extract data from the div (adjust the selector as needed)
-                const extractedData = await page.$$eval('div.target-class', (elements) =>
-                    elements.map((el) => el.textContent)
-                );
-        
-                // Save the extracted data
-                await Dataset.pushData({
-                    url: page.url(),
-                    extractedData,
-                });            
-            }
-            }
+            // property details
+            log.info('Extracting property details');
 
+            await page.waitForSelector('.property-info-container');
 
-        
+            // Extract data from the page
+            const properties = await page.$$eval('.property-info-container', (cards) =>
+                cards.map((card) => ({
+                    title: card.querySelector('.address-line')?.textContent?.trim(),
+                }))
+            );
+    
+            // Save the data to the default dataset
+            // await Dataset.pushData(properties);
+    
+            console.log('Crawled Properties:');
+            properties.forEach((property, index) => {
+                console.log(`Property ${index + 1}:`);
+                console.log(`  Title: ${property.title}`);
+                console.log('---');
+            });
+            
+            // // Extract property data
+            // const properties = await page.$$eval('.property-card', (cards) =>
+            //     cards.map((card) => ({
+            //         title: card.querySelector('.property-title')?.textContent?.trim() || '',
+            //         price: card.querySelector('.property-price')?.textContent?.trim() || '',
+            //         location: card.querySelector('.property-location')?.textContent?.trim() || '',
+            //         type: card.querySelector('.property-type')?.textContent?.trim() || '',
+            //         size: card.querySelector('.property-size')?.textContent?.trim() || '',
+            //     }))
+            // );
+
+            // Save properties to the database
+            // for (const property of properties) {
+            //     await savePropertyToDB(property);
+            // }
+        }
     },
-
     maxRequestsPerCrawl: 3,
     headless: false,
 });
 
-// Add first URL to the queue and start the crawl.
-await crawler.run(['https://www.nar.realtor/research-and-statistics/research-reports/commercial-real-estate-metro-market-reports']);
+await crawler.run(['https://www.crexi.com/properties?occupancyMax=63&occupancyMin=22']);

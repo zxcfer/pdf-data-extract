@@ -1,9 +1,0 @@
-{
-	"id": "r1yHnzs2yrD8fAn",
-	"json": "{\"id\":\"r1yHnzs2yrD8fAn\",\"url\":\"https://www.nar.realtor/research-and-statistics/research-reports/commercial-real-estate-metro-market-reports\",\"loadedUrl\":\"https://www.nar.realtor/research-and-statistics/research-reports/commercial-real-estate-metro-market-reports\",\"uniqueKey\":\"https://www.nar.realtor/research-and-statistics/research-reports/commercial-real-estate-metro-market-reports\",\"method\":\"GET\",\"noRetry\":false,\"retryCount\":2,\"errorMessages\":[\"page.click: Timeout 30000ms exceeded.\\nCall log:\\n  \\u001b[2m- waiting for locator('div.tabComboBoxNameContainer')\\u001b[22m\\n\\n    at PlaywrightCrawler.requestHandler (d:\\\\dev\\\\crawlers\\\\realestate_basic\\\\src\\\\main.ts:35:28)\\n    at wrap (D:\\\\dev\\\\crawlers\\\\realestate_basic\\\\node_modules\\\\@apify\\\\src\\\\index.ts:77:27)\",\"page.click: Target page, context or browser has been closed\\nCall log:\\n  \\u001b[2m- waiting for locator('div.tabComboBoxNameContainer')\\u001b[22m\\n\\n    at PlaywrightCrawler.requestHandler (d:\\\\dev\\\\crawlers\\\\realestate_basic\\\\src\\\\main.ts:35:28)\\n    at wrap (D:\\\\dev\\\\crawlers\\\\realestate_basic\\\\node_modules\\\\@apify\\\\src\\\\index.ts:77:27)\"],\"headers\":{},\"userData\":{\"__crawlee\":{\"state\":5}}}",
-	"method": "GET",
-	"orderNo": 1718917421105,
-	"retryCount": 2,
-	"uniqueKey": "https://www.nar.realtor/research-and-statistics/research-reports/commercial-real-estate-metro-market-reports",
-	"url": "https://www.nar.realtor/research-and-statistics/research-reports/commercial-real-estate-metro-market-reports"
-}
