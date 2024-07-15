@@ -1,65 +1,84 @@
-import { PlaywrightCrawler, Dataset } from 'crawlee';
+import { PlaywrightCrawler, RequestQueue } from 'crawlee';
+import { createPropertyIfNotExists, saveProperty } from './database.js';
 
 const crawler = new PlaywrightCrawler({
-    async requestHandler({ page, enqueueLinks, log }) {
+    async requestHandler({ page, log }) {
         log.info(`Processing ${page.url()}`);
 
-        // choose property or list page type
-        if (page.url().includes('properties')) {
-            // list page type
-            log.info(`Extracting page links`);
+        const LIST_XPATH = 'crx-property-tile-aggregate';
+        const LINK_XPATH = LIST_XPATH + ' a.cui-card-cover-link';
+        const PROPERTY_XPATH = '.details-list';
+        const ADDRESS_XPATH = '.property-details-item';
 
-            await enqueueLinks({
-                selector: 'crx-property-tile-aggregate a.cui-card-cover-link',
-                baseUrl: new URL(page.url()).origin,
-            });
-            
-            await enqueueLinks({
-                selector: 'crx-pager-alt a',
-                baseUrl: new URL(page.url()).origin,
-            });
+        if (page.url().includes('/properties?')) {
+            log.info(`Extracting PAGE links`);
+
+            await page.waitForSelector(LIST_XPATH);
+
+            // get links
+            const extractedLinks = await page.$$eval(LINK_XPATH, (anchors) =>
+                anchors.map((anchor) => anchor.getAttribute('href')?.split('?')[0])
+            );
+
+            const base = new URL(page.url()).origin;
+            log.info(`Base URL: ${base}`);
+
+            // save property links into database
+            for (const link of extractedLinks) {
+                if (link?.includes('/properties/')) {
+                    const property = await createPropertyIfNotExists({
+                        url: link,
+                        status: 'PENDING',
+                    });
+
+                    // queue link
+                    if (!property) {
+                        const queue = await RequestQueue.open();
+                        await queue.addRequest({ url: base + link });
+                        
+                    }
+                } else if (link?.includes('/properties?')) {
+                    const queue = await RequestQueue.open();
+                    await queue.addRequest({ url: link });
+                }
+            }
+
         } else {
-            // property details
-            log.info('Extracting property details');
+            log.info('Extracting PROPERTY DETAILS');
 
-            await page.waitForSelector('.property-info-container');
+            await page.waitForSelector('.post-title');
 
-            // Extract data from the page
-            const properties = await page.$$eval('.property-info-container', (cards) =>
+            // const extractedLinks = await page.$$eval(LINK_XPATH, (anchors) =>
+            //     anchors.map((anchor) => anchor.getAttribute('href')?.split('?')[0])
+            // );
+
+            const properties = await page.$$eval('.post-title', (cards) =>
                 cards.map((card) => ({
-                    title: card.querySelector('.address-line')?.textContent?.trim(),
+                    url: page.url(),
+                    title: card.querySelector('.post-title')?.textContent?.trim(),
+                    status: 'DONE',
                 }))
             );
-    
-            // Save the data to the default dataset
-            // await Dataset.pushData(properties);
-    
+
+            // save property details into database
+            // for (const property of properties) {
+            //     await saveProperty(property);
+            // }
+
             console.log('Crawled Properties:');
             properties.forEach((property, index) => {
                 console.log(`Property ${index + 1}:`);
                 console.log(`  Title: ${property.title}`);
                 console.log('---');
-            });
-            
-            // // Extract property data
-            // const properties = await page.$$eval('.property-card', (cards) =>
-            //     cards.map((card) => ({
-            //         title: card.querySelector('.property-title')?.textContent?.trim() || '',
-            //         price: card.querySelector('.property-price')?.textContent?.trim() || '',
-            //         location: card.querySelector('.property-location')?.textContent?.trim() || '',
-            //         type: card.querySelector('.property-type')?.textContent?.trim() || '',
-            //         size: card.querySelector('.property-size')?.textContent?.trim() || '',
-            //     }))
-            // );
-
-            // Save properties to the database
-            // for (const property of properties) {
-            //     await savePropertyToDB(property);
-            // }
+            });            
         }
     },
     maxRequestsPerCrawl: 3,
     headless: false,
 });
 
-await crawler.run(['https://www.crexi.com/properties?occupancyMax=63&occupancyMin=22']);
+// await crawler.run(['https://www.crexi.com/properties?occupancyMax=80&occupancyMin=20']);
+// await crawler.run(['https://www.crexi.com/properties/1517613/georgia-dahlonega-storage']);
+// await crawler.run(['https://webcache.googleusercontent.com/search?q=cache:https://www.crexi.com/properties/1550508/tennessee-chattanooga-medical-office']);
+await crawler.run(['https://ferpython.com/numpy-array']);
+
