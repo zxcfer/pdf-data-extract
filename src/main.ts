@@ -10,32 +10,54 @@ async function runCrawler() {
       log.info(`Processing ${page.url()}`);
 
       // 1: check if logged in
-      const SAVE_XPATH = 'crx-save-link';
-    
-      // get text of save button
-      const saveButton = await page.$(SAVE_XPATH);
-      const saveText = await saveButton?.evaluate((button) => button.textContent?.trim());
-      log.info(`Save button: ${saveText}`);
+      const HEADER_XPATH = 'crx-header-content';
+      const SAVE_XPATH = 'crx-saved-link';
+      const SIGNUP_XPATH = 'button.signup';
+      const SIGNUP_MODAL_XPATH = '#signupModal';
+      const SUBMIT_XPATH = 'button[type="submit"]';
+  
+      // get text of save button using locator
+      await page.waitForSelector(HEADER_XPATH);
+      const saveTextElem = await page.$(SAVE_XPATH);
+      const saveText = await saveTextElem?.textContent();
+      log.info(`Save text: ${saveText}`);
 
       // if not logged in, login
-      if (saveText?.includes('Save')) {
+      if (!saveText?.includes('Saved')) {
         log.info('Logging in...');
 
-        const LOGIN_XPATH = 'crx-login-link';
-        const EMAIL_XPATH = 'crx-email-input';
-        const PASSWORD_XPATH = 'crx-password-input';
-        const SUBMIT_XPATH = 'crx-login-button';
+        const username = process.env.CREXI_USERNAME;
+        const password = process.env.CREXI_PASSWORD;
+
+        if (!username || !password) {
+          log.error('Missing username or password');
+          return;
+        }
+
+        // click on "sign up or login" button
+        await page.click(SIGNUP_XPATH);
+
+        // wait for sign up form and click on login tab
+        await page.waitForSelector(SIGNUP_MODAL_XPATH);
+        await page.locator('mat-dialog-container').first().locator("div.tab").nth(1).click();
+
+        // wait for login form
+        await page.waitForSelector(SUBMIT_XPATH);
+
+        // fill in form
+        await page.fill('#login-form input[formcontrolname="email"]', username);
+        await page.fill('#login-form input[formcontrolname="password"]', password);
 
         // click on login button
-        await page.click(`.${LOGIN_XPATH}`);
+        await page.click(SUBMIT_XPATH);
+        log.info('Submitted login form');
+
+        // wait for login to complete
+        await page.waitForSelector(SAVE_XPATH);
+        log.info('Logged in successfully');
       }
-      
-      // 2: click on sign up/login button
-      // 2.1: click on login button
-      // 3: fill in the form
-      // 4: submit form
-      // 5: wait for login to complete
-      // 6: go to the page
+
+      log.info('Crawling...');
 
       const LIST_XPATH = 'crx-property-tile-aggregate';
       const LINK_XPATH = LIST_XPATH + ' a.cui-card-cover-link';
@@ -75,11 +97,31 @@ async function runCrawler() {
       } else {
         log.info('Extracting PROPERTY DETAILS');
 
-        const PROPERTY_XPATH = '#property-details';
+        const INFO_XPATH = 'crx-sales-pdp-info-tab';
         const DETAILS_XPATH = '.property-details-item';
 
-        await page.waitForSelector(PROPERTY_XPATH);
+        await page.waitForSelector(INFO_XPATH);
 
+        // address-line
+        const addressLine = await page.$eval('.address-line', (el) => el.textContent?.trim());
+
+        // get info items
+        const infoItems = await page.$$eval('.update-info-item', (items) => {
+          const infoItem: { [key: string]: any } = {};
+        
+          items.forEach((item) => {
+            const label = item.querySelector('.pdp_updated-date-label')?.textContent?.trim();        
+            const value = item.querySelector('.pdp_updated-date-value')?.textContent?.trim();
+        
+            if (label && value) {
+              infoItem[label] = value;
+            }
+          });
+        
+          return infoItem;
+        });
+
+        // get property details
         const propertyDetails = await page.$$eval(DETAILS_XPATH, (details) => {
           const propertyDetail: { [key: string]: any } = {};
         
@@ -104,7 +146,54 @@ async function runCrawler() {
           return propertyDetail;
         });
 
-        const property = {...{ url: page.url(), status: 'DONE' }, ...propertyDetails};
+        // marketing description
+        const description = await page.$eval('#descriptionCollapsable', (el) => el.textContent?.trim());
+
+        // population
+        const population = await page.$eval('.insights-line-chart__metric-primary', (el) => el.textContent?.trim());
+
+        // insights-estimate__container
+        const insights_household_income = await page.$$eval('.insights-estimate__container', (items) => {
+          const insightItem: { [key: string]: any } = {};
+        
+          items.forEach((item) => {
+            const label = item.querySelector('.insights-estimate__label')?.textContent?.trim();        
+            const value = item.querySelector('.insights-estimate__value')?.textContent?.trim();
+        
+            if (label && value) {
+              insightItem[label] = value;
+            }
+          });
+        
+          return insightItem;
+        });
+
+        // insights-estimate
+        const insights_age_demographics = await page.$$eval('.insights-estimate__metric-container', (items) => {
+          const insightItem: { [key: string]: any } = {};
+        
+          items.forEach((item) => {
+            const label = item.querySelector('.insights-estimate__metric-label ng-star-inserted')?.textContent?.trim();
+            const value = item.querySelector('.insights-estimate__metric')?.textContent?.trim();        
+        
+            if (label && value) {
+              insightItem[label] = value;
+            }
+          });
+        
+          return insightItem;
+        });
+
+        const property = {
+          ...{ url: page.url(), status: 'DONE' },
+          ...{ address: addressLine },
+          ...{ marketing_description: description },
+          ...{ population },
+          ...insights_household_income,
+          ...insights_age_demographics,
+          ...infoItems, 
+          ...propertyDetails
+        };
         
         console.log(property);
         await createProperty(property);
@@ -115,9 +204,8 @@ async function runCrawler() {
   });
 
   // await crawler.run(['https://www.crexi.com/properties?occupancyMax=80&occupancyMin=20']);
-  // await crawler.run(['https://www.crexi.com/properties/1517613/georgia-dahlonega-storage']);
-  await crawler.run(['https://webcache.googleusercontent.com/search?q=cache:https://www.crexi.com/properties/1550508/tennessee-chattanooga-medical-office']);
-  // await crawler.run(['https://ferpython.com/numpy-array']);
+  await crawler.run(['https://www.crexi.com/properties/1517613/georgia-dahlonega-storage']);
+  // await crawler.run(['https://webcache.googleusercontent.com/search?q=cache:https://www.crexi.com/properties/1550508/tennessee-chattanooga-medical-office']);
 
   console.log('Crawler finished.');
   await closeDatabase();
