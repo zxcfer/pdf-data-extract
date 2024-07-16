@@ -1,5 +1,6 @@
 import { PlaywrightCrawler, RequestQueue } from 'crawlee';
-import { createPropertyIfNotExists, saveProperty } from './database.js';
+import { createPropertyIfNotExists, Property, saveProperty } from './database.js';
+import { keys } from 'ts-transformer-keys';
 
 const crawler = new PlaywrightCrawler({
     async requestHandler({ page, log }) {
@@ -7,8 +8,6 @@ const crawler = new PlaywrightCrawler({
 
         const LIST_XPATH = 'crx-property-tile-aggregate';
         const LINK_XPATH = LIST_XPATH + ' a.cui-card-cover-link';
-        const PROPERTY_XPATH = '.details-list';
-        const ADDRESS_XPATH = '.property-details-item';
 
         if (page.url().includes('/properties?')) {
             log.info(`Extracting PAGE links`);
@@ -46,31 +45,50 @@ const crawler = new PlaywrightCrawler({
         } else {
             log.info('Extracting PROPERTY DETAILS');
 
-            await page.waitForSelector('.post-title');
+            const PROPERTY_XPATH = '#property-details';
+            const DETAILS_XPATH = '.property-details-item';
 
-            // const extractedLinks = await page.$$eval(LINK_XPATH, (anchors) =>
-            //     anchors.map((anchor) => anchor.getAttribute('href')?.split('?')[0])
-            // );
+            await page.waitForSelector(PROPERTY_XPATH);
 
-            const properties = await page.$$eval('.post-title', (cards) =>
-                cards.map((card) => ({
-                    url: page.url(),
-                    title: card.querySelector('.post-title')?.textContent?.trim(),
-                    status: 'DONE',
-                }))
-            );
+            const propertyDetails = await page.$$eval(DETAILS_XPATH, (details) => {
+                const fields = ['fer'];
+                const propertyDetail: { [key: string]: any } = {};
+            
+                details.forEach((detail) => {
+                    // reguex for removing text in parentheses
+                    const re = /\(.*?\)/g;
+                    const label = detail.querySelector('.detail-name')?.textContent?.trim()
+                        .toLowerCase()
+                        .replace(' ', '_')
+                        .replace('-', '_')
+                        .replace(re, '')
+                        .replace(/[^a-z0-9_]/g, '');
+                                
+                    const value = detail.querySelector('.detail-value')?.textContent?.trim()
+                        .replace('$', '')
+                        .replace(',', '')
+                        .replace('%', '')
+                        .replace(/[^a-zA-Z0-9.]/g, '');
+            
+                    if (label && value) {
+                        if (fields.includes(label)) {
+                            propertyDetail[label] = value;
+                        }
+                    }
+                });
+            
+                return propertyDetail;
+            });
 
-            // save property details into database
-            // for (const property of properties) {
-            //     await saveProperty(property);
-            // }
+            console.log(propertyDetails);
 
-            console.log('Crawled Properties:');
-            properties.forEach((property, index) => {
-                console.log(`Property ${index + 1}:`);
-                console.log(`  Title: ${property.title}`);
-                console.log('---');
-            });            
+            // combine Property with propertyDetails
+            const property = {...{ url: page.url(), status: 'DONE' }, ...propertyDetails};
+
+            console.log(property);
+
+            // save property
+            await saveProperty(property);
         }
     },
     maxRequestsPerCrawl: 3,
@@ -79,6 +97,6 @@ const crawler = new PlaywrightCrawler({
 
 // await crawler.run(['https://www.crexi.com/properties?occupancyMax=80&occupancyMin=20']);
 // await crawler.run(['https://www.crexi.com/properties/1517613/georgia-dahlonega-storage']);
-// await crawler.run(['https://webcache.googleusercontent.com/search?q=cache:https://www.crexi.com/properties/1550508/tennessee-chattanooga-medical-office']);
-await crawler.run(['https://ferpython.com/numpy-array']);
+await crawler.run(['https://webcache.googleusercontent.com/search?q=cache:https://www.crexi.com/properties/1550508/tennessee-chattanooga-medical-office']);
+// await crawler.run(['https://ferpython.com/numpy-array']);
 

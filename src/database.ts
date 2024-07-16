@@ -12,14 +12,36 @@ const db: Knex = knex({
   }
 });
 
-interface Property {
-  title?: string;
+export interface Property {
   price?: string;
   location?: string;
-  type?: string;
+  date_added?: string;
+  days_on?: number;
+  time_since_last_update?: number;
+  property_type?: string;
   size?: string;
   url: string;
   status: string;
+  investment_type?: string;
+  class?: string;
+  tenancy?: string;
+  square_footage?: number;
+  net_rentable?: number;
+  price_sq_ft?: number;
+  cap_rate?: number;
+  pro_forma_cap_rate?: number;
+  occupancy?: string;
+  noi?: number;
+  pro_forma_noi?: number;
+  units?: number;
+  year_built?: number;
+  year_renovated?: number;
+  buildings?: number;
+  stories?: number;
+  zoning?: number;
+  lot_size_acres?: number;
+  price_unit?: number;
+  ceiling_height?: number;
 }
 
 interface PropertyList {
@@ -57,25 +79,10 @@ export async function initDatabase(): Promise<void> {
   await db.schema.createTableIfNotExists(
     'properties', (table) => {
       table.increments('id').primary();
-      table.text('title');
-      table.text('price');
-      table.text('location');
-      table.text('type');
-      table.text('size');
-      table.text('url');
+      
       table.enu('status', ['DONE', 'PENDING', 'ERROR'], {
         useNative: true,
         enumName: 'property_status',
-      });
-  });
-
-  await db.schema.createTableIfNotExists(
-    'list', (table) => {
-      table.increments('id').primary();
-      table.text('url');
-      table.enu('status', ['DONE', 'PENDING', 'ERROR'], {
-        useNative: true,
-        enumName: 'list_status',
       });
   });
 }
