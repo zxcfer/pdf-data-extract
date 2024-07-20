@@ -110,7 +110,11 @@ async function runCrawler() {
           const infoItem: { [key: string]: any } = {};
         
           items.forEach((item) => {
-            const label = item.querySelector('.pdp_updated-date-label')?.textContent?.trim();        
+            const label = item.querySelector('.pdp_updated-date-label')?.textContent?.trim()
+              .toLowerCase()
+              .replace(' ', '_')
+              .replace('-', '_')
+              .replace(/[^a-z0-9_]/g, '');        
             const value = item.querySelector('.pdp_updated-date-value')?.textContent?.trim();
         
             if (label && value) {
@@ -133,10 +137,7 @@ async function runCrawler() {
               .replace('-', '_')
               .replace(/[^a-z0-9_]/g, '');
                   
-            const value = detail.querySelector('.detail-value')?.textContent?.trim()
-              .replace('$', '')
-              .replace(',', '')
-              .replace('%', '');
+            const value = detail.querySelector('.detail-value')?.textContent?.trim();
         
             if (label && value) {
               propertyDetail[label] = value;
@@ -150,30 +151,19 @@ async function runCrawler() {
         const description = await page.$eval('#descriptionCollapsable', (el) => el.textContent?.trim());
 
         // population
-        const population = await page.$eval('.insights-line-chart__metric-primary', (el) => el.textContent?.trim());
+        const population = await page.$eval('.insights-demographics', 
+          (el) => el.querySelector('.insights-line-chart__metric-primary')?.textContent?.trim());
 
-        // insights-estimate__container
-        const insights_household_income = await page.$$eval('.insights-estimate__container', (items) => {
+        // Household Income and Age Demographics
+        const insights = await page.$$eval('.insights-estimate__metric-container', (items) => {
           const insightItem: { [key: string]: any } = {};
         
           items.forEach((item) => {
-            const label = item.querySelector('.insights-estimate__label')?.textContent?.trim();        
-            const value = item.querySelector('.insights-estimate__value')?.textContent?.trim();
-        
-            if (label && value) {
-              insightItem[label] = value;
-            }
-          });
-        
-          return insightItem;
-        });
-
-        // insights-estimate
-        const insights_age_demographics = await page.$$eval('.insights-estimate__metric-container', (items) => {
-          const insightItem: { [key: string]: any } = {};
-        
-          items.forEach((item) => {
-            const label = item.querySelector('.insights-estimate__metric-label ng-star-inserted')?.textContent?.trim();
+            const label = item.querySelector('.insights-estimate__metric-label')?.textContent?.trim()
+              .toLowerCase()
+              .replace(' ', '_')
+              .replace('-', '_')
+              .replace(/[^a-z0-9_]/g, '');
             const value = item.querySelector('.insights-estimate__metric')?.textContent?.trim();        
         
             if (label && value) {
@@ -184,15 +174,37 @@ async function runCrawler() {
           return insightItem;
         });
 
+        // Employees
+        const employees = await page.$eval('.insights-demographics__employees', 
+          (el) => el.querySelector('.insights-histogram-horizontal-alt__metric-primary')?.textContent?.trim());
+
+        // Housing Occupancy Ratio
+        const housing_occupancy_ratio = await page.$eval('.insights-demographics__housing', 
+          (el) => el.querySelector('.insights-ratio__metric-primary')?.textContent?.trim());
+
+        const housing_occupancy_ratio_predicted = await page.$eval('.insights-demographics__housing', 
+          (el) => el.querySelector('.insights-ratio__metric-label')?.textContent?.trim());
+
+        // Renter to Homeowner Ratio
+        const renter_to_homeowner_ratio = await page.$eval('.insights-demographics__housing-renter-container', 
+          (el) => el.querySelector('.insights-ratio__metric-primary')?.textContent?.trim());
+
+        const renter_to_homeowner_ratio_predicted = await page.$eval('.insights-demographics__housing-renter-container', 
+          (el) => el.querySelector('.insights-ratio__metric-label')?.textContent?.trim());
+
         const property = {
           ...{ url: page.url(), status: 'DONE' },
           ...{ address: addressLine },
+          ...infoItems, 
+          ...propertyDetails,
           ...{ marketing_description: description },
           ...{ population },
-          ...insights_household_income,
-          ...insights_age_demographics,
-          ...infoItems, 
-          ...propertyDetails
+          ...insights,
+          ...{ employees },
+          ...{ housing_occupancy_ratio },
+          ...{ housing_occupancy_ratio_predicted },
+          ...{ renter_to_homeowner_ratio },
+          ...{ renter_to_homeowner_ratio_predicted },
         };
         
         console.log(property);
