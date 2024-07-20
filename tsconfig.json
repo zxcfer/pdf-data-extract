@@ -6,7 +6,10 @@
 		"target": "ES2022",
 		"outDir": "dist",
 		"noUnusedLocals": false,
-		"lib": ["DOM"]
+		"lib": [
+			"ES2021",
+			"DOM"
+		]
 	},
 	"include": ["./src/**/*"]
 }

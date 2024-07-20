@@ -112,8 +112,8 @@ async function runCrawler() {
           items.forEach((item) => {
             const label = item.querySelector('.pdp_updated-date-label')?.textContent?.trim()
               .toLowerCase()
-              .replace(' ', '_')
-              .replace('-', '_')
+              .replaceAll(' ', '_')
+              .replaceAll('-', '_')
               .replace(/[^a-z0-9_]/g, '');        
             const value = item.querySelector('.pdp_updated-date-value')?.textContent?.trim();
         
@@ -133,8 +133,9 @@ async function runCrawler() {
             // reguex for removing text in parentheses
             const label = detail.querySelector('.detail-name')?.textContent?.trim()
               .toLowerCase()
-              .replace(' ', '_')
-              .replace('-', '_')
+              .replaceAll(' ', '_')
+              .replaceAll('-', '_')
+              .replaceAll('/', '_')
               .replace(/[^a-z0-9_]/g, '');
                   
             const value = detail.querySelector('.detail-value')?.textContent?.trim();
@@ -147,8 +148,31 @@ async function runCrawler() {
           return propertyDetail;
         });
 
-        // marketing description
-        const description = await page.$eval('#descriptionCollapsable', (el) => el.textContent?.trim());
+        // marketing description and investement highlights
+        let marketing_desc : string | null | undefined;
+        try {
+          marketing_desc = await page.$eval('#descriptionCollapsable', (el) => el.textContent?.trim());
+          if (!marketing_desc) {
+            marketing_desc = '';
+          }
+        }  catch (err: any) {
+          log.warning('No marketing description found');
+        }
+
+        // investment highlights
+        let inv_highlights : string | null | undefined;
+        try {
+          inv_highlights = await page.$eval('#investmentHighlightsCollapsable', (el) => el.textContent?.trim());
+          if (!inv_highlights) {
+            inv_highlights = '';
+          }
+        }  catch (err: any) {
+          log.warning('No investment highlights found');
+        }
+
+        // find with locator insights-line-chart__chart
+        await page.waitForSelector('.insights-line-chart__chart canvas');
+        await page.locator('.insights-line-chart__chart canvas').focus();
 
         // population
         const population = await page.$eval('.insights-demographics', 
@@ -161,8 +185,8 @@ async function runCrawler() {
           items.forEach((item) => {
             const label = item.querySelector('.insights-estimate__metric-label')?.textContent?.trim()
               .toLowerCase()
-              .replace(' ', '_')
-              .replace('-', '_')
+              .replaceAll(' ', '_')
+              .replaceAll('-', '_')
               .replace(/[^a-z0-9_]/g, '');
             const value = item.querySelector('.insights-estimate__metric')?.textContent?.trim();        
         
@@ -192,12 +216,30 @@ async function runCrawler() {
         const renter_to_homeowner_ratio_predicted = await page.$eval('.insights-demographics__housing-renter-container', 
           (el) => el.querySelector('.insights-ratio__metric-label')?.textContent?.trim());
 
+        // asking price and deposit
+        const offer = await page.$$eval('.term-line', (items) => {
+          const offerItem: { [key: string]: any } = {};
+        
+          items.forEach((item) => {
+            const label = item.querySelector('.term-name')?.textContent?.trim().toLowerCase()
+              .replaceAll(' ', '_').replaceAll('-', '_').replace(/[^a-z0-9_]/g, '');
+            const value = item.querySelector('.term-value')?.textContent?.trim();        
+        
+            if (label && value) {
+              offerItem[label] = value;
+            }
+          });
+        
+          return offerItem;
+        });
+
         const property = {
           ...{ url: page.url(), status: 'DONE' },
           ...{ address: addressLine },
           ...infoItems, 
           ...propertyDetails,
-          ...{ marketing_description: description },
+          ...{ marketing_description: marketing_desc },
+          ...{ investment_highlights: inv_highlights },
           ...{ population },
           ...insights,
           ...{ employees },
@@ -205,6 +247,7 @@ async function runCrawler() {
           ...{ housing_occupancy_ratio_predicted },
           ...{ renter_to_homeowner_ratio },
           ...{ renter_to_homeowner_ratio_predicted },
+          ...offer,
         };
         
         console.log(property);
