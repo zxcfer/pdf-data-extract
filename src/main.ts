@@ -2,6 +2,10 @@ import { PlaywrightCrawler, RequestQueue } from 'crawlee';
 import { connectToDatabase, closeDatabase, 
   createProperty, updateProperty } from './mongodb.js';
 
+function sleep(seconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, seconds * 1000))
+}
+
 async function runCrawler() {
   await connectToDatabase();
 
@@ -26,8 +30,8 @@ async function runCrawler() {
       if (!saveText?.includes('Saved')) {
         log.info('Logging in...');
 
-        const username = process.env.CREXI_USERNAME;
-        const password = process.env.CREXI_PASSWORD;
+        const username = process.env.WEB_USERNAME;
+        const password = process.env.WEB_PASSWORD;
 
         if (!username || !password) {
           log.error('Missing username or password');
@@ -55,6 +59,9 @@ async function runCrawler() {
         // wait for login to complete
         await page.waitForSelector(SAVE_XPATH);
         log.info('Logged in successfully');
+
+        // reloading page to get updated data and cotinue crawl
+        await page.reload();
       }
 
       log.info('Crawling...');
@@ -170,51 +177,69 @@ async function runCrawler() {
           log.warning('No investment highlights found');
         }
 
-        // find with locator insights-line-chart__chart
-        await page.waitForSelector('.insights-line-chart__chart canvas');
-        await page.locator('.insights-line-chart__chart canvas').focus();
+        let population_insights : { [key: string]: any } = {population: ''};
+        try {
+          // await page.locator('.insights-demographics').scrollIntoViewIfNeeded();
+          await page.getByText('Population').scrollIntoViewIfNeeded();
+          await page.mouse.wheel(0, 10);
+          log.info('Scrolled to population');  
 
-        // population
-        const population = await page.$eval('.insights-demographics', 
-          (el) => el.querySelector('.insights-line-chart__metric-primary')?.textContent?.trim());
+          // population
+          await page.waitForSelector('.insights-line-chart__chart canvas');
+          const population = await page.$eval('.insights-demographics', 
+            (el) => el.querySelector('.insights-line-chart__metric-primary')?.textContent?.trim());
 
-        // Household Income and Age Demographics
-        const insights = await page.$$eval('.insights-estimate__metric-container', (items) => {
-          const insightItem: { [key: string]: any } = {};
-        
-          items.forEach((item) => {
-            const label = item.querySelector('.insights-estimate__metric-label')?.textContent?.trim()
-              .toLowerCase()
-              .replaceAll(' ', '_')
-              .replaceAll('-', '_')
-              .replace(/[^a-z0-9_]/g, '');
-            const value = item.querySelector('.insights-estimate__metric')?.textContent?.trim();        
-        
-            if (label && value) {
-              insightItem[label] = value;
-            }
+          // Household Income and Age Demographics
+          const insights = await page.$$eval('.insights-estimate__metric-container', (items) => {
+            const insightItem: { [key: string]: any } = {};
+          
+            items.forEach((item) => {
+              const label = item.querySelector('.insights-estimate__metric-label')?.textContent?.trim()
+                .toLowerCase()
+                .replaceAll(' ', '_')
+                .replaceAll('-', '_')
+                .replace(/[^a-z0-9_]/g, '');
+              const value = item.querySelector('.insights-estimate__metric')?.textContent?.trim();        
+          
+              if (label && value) {
+                insightItem[label] = value;
+              }
+            });
+          
+            return insightItem;
           });
-        
-          return insightItem;
-        });
 
-        // Employees
-        const employees = await page.$eval('.insights-demographics__employees', 
-          (el) => el.querySelector('.insights-histogram-horizontal-alt__metric-primary')?.textContent?.trim());
+          // Employees
+          const employees = await page.$eval('.insights-demographics__employees', 
+            (el) => el.querySelector('.insights-histogram-horizontal-alt__metric-primary')?.textContent?.trim());
 
-        // Housing Occupancy Ratio
-        const housing_occupancy_ratio = await page.$eval('.insights-demographics__housing', 
-          (el) => el.querySelector('.insights-ratio__metric-primary')?.textContent?.trim());
+          // Housing Occupancy Ratio
+          const housing_occupancy_ratio = await page.$eval('.insights-demographics__housing', 
+            (el) => el.querySelector('.insights-ratio__metric-primary')?.textContent?.trim());
 
-        const housing_occupancy_ratio_predicted = await page.$eval('.insights-demographics__housing', 
-          (el) => el.querySelector('.insights-ratio__metric-label')?.textContent?.trim());
+          const housing_occupancy_ratio_predicted = await page.$eval('.insights-demographics__housing', 
+            (el) => el.querySelector('.insights-ratio__metric-label')?.textContent?.trim());
 
-        // Renter to Homeowner Ratio
-        const renter_to_homeowner_ratio = await page.$eval('.insights-demographics__housing-renter-container', 
-          (el) => el.querySelector('.insights-ratio__metric-primary')?.textContent?.trim());
+          // Renter to Homeowner Ratio
+          const renter_to_homeowner_ratio = await page.$eval('.insights-demographics__housing-renter-container', 
+            (el) => el.querySelector('.insights-ratio__metric-primary')?.textContent?.trim());
 
-        const renter_to_homeowner_ratio_predicted = await page.$eval('.insights-demographics__housing-renter-container', 
-          (el) => el.querySelector('.insights-ratio__metric-label')?.textContent?.trim());
+          const renter_to_homeowner_ratio_predicted = await page.$eval('.insights-demographics__housing-renter-container', 
+            (el) => el.querySelector('.insights-ratio__metric-label')?.textContent?.trim());
+          
+          population_insights = {
+            ...{ population },
+            ...insights,
+            ...{ employees },
+            ...{ housing_occupancy_ratio },
+            ...{ housing_occupancy_ratio_predicted },
+            ...{ renter_to_homeowner_ratio },
+            ...{ renter_to_homeowner_ratio_predicted },
+          };
+
+        } catch (err: any) {
+          log.warning('No population found');
+        }
 
         // asking price and deposit
         const offer = await page.$$eval('.term-line', (items) => {
@@ -240,16 +265,10 @@ async function runCrawler() {
           ...propertyDetails,
           ...{ marketing_description: marketing_desc },
           ...{ investment_highlights: inv_highlights },
-          ...{ population },
-          ...insights,
-          ...{ employees },
-          ...{ housing_occupancy_ratio },
-          ...{ housing_occupancy_ratio_predicted },
-          ...{ renter_to_homeowner_ratio },
-          ...{ renter_to_homeowner_ratio_predicted },
+          ...population_insights,
           ...offer,
         };
-        
+
         console.log(property);
         await createProperty(property);
       }
@@ -258,10 +277,13 @@ async function runCrawler() {
     headless: false,
   });
 
-  // await crawler.run(['https://www.crexi.com/properties?occupancyMax=80&occupancyMin=20']);
-  await crawler.run(['https://www.crexi.com/properties/1517613/georgia-dahlonega-storage']);
-  // await crawler.run(['https://webcache.googleusercontent.com/search?q=cache:https://www.crexi.com/properties/1550508/tennessee-chattanooga-medical-office']);
-
+  const starting_url: string | null | undefined = process.env.WEB_URL;
+  if (!starting_url) {
+    console.error('Missing WEB_URL environment variable');
+    return;
+  }
+  await crawler.run([starting_url]);
+  
   console.log('Crawler finished.');
   await closeDatabase();
 }

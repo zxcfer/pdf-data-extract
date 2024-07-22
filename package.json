@@ -1,29 +1,30 @@
 {
-    "name": "realestate_basic",
-    "version": "0.0.1",
-    "type": "module",
-    "description": "",
-    "dependencies": {
-        "crawlee": "^3.0.0",
-        "knex": "^3.1.0",
-        "mongodb": "^6.8.0",
-        "pg": "^8.12.0",
-        "playwright": "*",
-        "ts-transformer-keys": "^0.4.4"
-    },
-    "devDependencies": {
-        "@apify/tsconfig": "^0.1.0",
-        "@types/node": "^20.0.0",
-        "tsx": "^4.4.0",
-        "typescript": "~5.4.0"
-    },
-    "scripts": {
-        "start": "npm run start:dev",
-        "start:prod": "node dist/main.js",
-        "start:dev": "tsx src/main.ts",
-        "build": "tsc",
-        "test": "echo \"Error: oops, the actor has no tests yet, sad!\" && exit 1"
-    },
-    "author": "It's not you it's me",
-    "license": "ISC"
+  "name": "realestate_basic",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "",
+  "dependencies": {
+    "crawlee": "^3.0.0",
+    "knex": "^3.1.0",
+    "mongodb": "^6.8.0",
+    "pg": "^8.12.0",
+    "playwright": "*",
+    "ts-transformer-keys": "^0.4.4"
+  },
+  "devDependencies": {
+    "@apify/tsconfig": "^0.1.0",
+    "@playwright/test": "^1.45.2",
+    "@types/node": "^20.0.0",
+    "tsx": "^4.4.0",
+    "typescript": "~5.4.0"
+  },
+  "scripts": {
+    "start": "npm run start:dev",
+    "start:prod": "node dist/main.js",
+    "start:dev": "tsx src/main.ts",
+    "build": "tsc",
+    "test": "echo \"Error: oops, the actor has no tests yet, sad!\" && exit 1"
+  },
+  "author": "It's not you it's me",
+  "license": "ISC"
 }
