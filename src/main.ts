@@ -1,13 +1,12 @@
 import { PlaywrightCrawler, RequestQueue } from 'crawlee';
-import { connectToDatabase, closeDatabase, 
+import { connectToDatabase, closeDatabase, getPendingProperties,
   createProperty, updateProperty } from './mongodb.js';
-
-function sleep(seconds: number) {
-  return new Promise((resolve) => setTimeout(resolve, seconds * 1000))
-}
 
 async function runCrawler() {
   await connectToDatabase();
+
+  const starting_url = 'https://www.crexi.com/properties?occupancyMax=80&occupancyMin=20';
+  const base_url = new URL(starting_url).origin;
 
   const crawler = new PlaywrightCrawler({
     async requestHandler({ page, log }) {
@@ -74,30 +73,46 @@ async function runCrawler() {
 
         await page.waitForSelector(LIST_XPATH);
 
-        // get links
+        // get property links
         const extractedLinks = await page.$$eval(LINK_XPATH, (anchors) =>
           anchors.map((anchor) => anchor.getAttribute('href')?.split('?')[0])
         );
 
-        const base = new URL(page.url()).origin;
-        log.info(`Base URL: ${base}`);
-
-        // save property links into database
         for (const link of extractedLinks) {
+          log.info(`Analyzing link: ${link}`);
+
           if (link?.includes('/properties/')) {
+            log.info(`Property link detected: ${link}`);
+
+            // save Property links into database
             const property = await createProperty({
               url: link,
               status: 'PENDING',
             });
 
-            // queue link
-            if (!property) {
+            // queue Property link
+            if (property) {
               const queue = await RequestQueue.open();
-              await queue.addRequest({ url: base + link });  
+              await queue.addRequest({ url: base_url + link });  
             }
-          } else if (link?.includes('/properties?')) {
+          } else {
+            log.info(`Not a property link: ${link}`);
+          }
+        }
+
+        // get page links
+        const pageLinks = await page.$$eval('li.page a', (anchors) =>
+          anchors.map((anchor) => anchor.getAttribute('href'))
+        );
+
+        for (const link of pageLinks) {
+          if (link?.includes('/properties?')) {
+            const newUrl = starting_url + '&page=' + link.split('page=')[1];
             const queue = await RequestQueue.open();
-            await queue.addRequest({ url: link });
+            await queue.addRequest({ url: newUrl });
+            log.info(`Page link queued: ${link}`);
+          } else {
+            log.info(`Not a page link: ${link}`);
           }
         }
 
@@ -258,8 +273,9 @@ async function runCrawler() {
           return offerItem;
         });
 
+        const current_url = page.url().replace(base_url, '').split('?')[0];
         const property = {
-          ...{ url: page.url(), status: 'DONE' },
+          ...{ url: current_url, status: 'DONE' },
           ...{ address: addressLine },
           ...infoItems, 
           ...propertyDetails,
@@ -270,18 +286,25 @@ async function runCrawler() {
         };
 
         console.log(property);
-        await createProperty(property);
+
+        const result = await updateProperty(property);
+        console.log(`${result.matchedCount} matched | ${result.modifiedCount} updated`);
       }
     },
-    maxRequestsPerCrawl: 3,
+    maxRequestsPerCrawl: 300,
+    maxConcurrency: 1,
     headless: false,
   });
 
-  const starting_url: string | null | undefined = process.env.WEB_URL;
-  if (!starting_url) {
-    console.error('Missing WEB_URL environment variable');
-    return;
+  // get PENDING properties from mongodb
+  const properties = await getPendingProperties();
+
+  // put all properties urls into an array
+  const propertyUrls = properties.map((property) => base_url + property.url);
+  if (propertyUrls.length > 0) {
+    await crawler.run(propertyUrls);
   }
+  
   await crawler.run([starting_url]);
   
   console.log('Crawler finished.');

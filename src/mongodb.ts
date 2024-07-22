@@ -1,4 +1,4 @@
-import { MongoClient, Db, Collection } from 'mongodb';
+import { MongoClient, Db } from 'mongodb';
 
 let db: Db;
 let client: MongoClient;
@@ -10,8 +10,8 @@ export async function connectToDatabase(): Promise<void> {
   db = client.db('crexi');
 }
 
-export async function updateProperty(property: any): Promise<void> {
-  db.collection('properties').updateOne({url: property.url}, {$set: property});
+export async function updateProperty(property: any): Promise<any> {
+  return db.collection('properties').updateOne({url: property.url}, {$set: property});
 }
 
 export async function createProperty(property: any): Promise<any> {
@@ -21,6 +21,10 @@ export async function createProperty(property: any): Promise<any> {
     return null;
   }
   return existing;
+}
+
+export async function getPendingProperties(): Promise<any[]> {
+  return db.collection('properties').find({status: 'PENDING'}).toArray();
 }
 
 export async function closeDatabase(): Promise<void> {
