@@ -14,7 +14,7 @@ export async function updateProperty(property: any): Promise<any> {
   return db.collection('properties').updateOne({url: property.url}, {$set: property});
 }
 
-export async function createProperty(property: any): Promise<any> {
+export async function getOrCreateProperty(property: any): Promise<any> {
   let existing = await db.collection('properties').findOne({url: property.url});
   if (!existing) {
     await db.collection('properties').insertOne(property);
@@ -23,8 +23,16 @@ export async function createProperty(property: any): Promise<any> {
   return existing;
 }
 
+export async function createProperty(property: any): Promise<any> {
+  await db.collection('properties').insertOne(property);
+}
+
 export async function getPendingProperties(): Promise<any[]> {
   return db.collection('properties').find({status: 'PENDING'}).toArray();
+}
+
+export async function getProperty(url: string): Promise<any> {
+  return db.collection('properties').findOne({url: url});
 }
 
 export async function closeDatabase(): Promise<void> {
