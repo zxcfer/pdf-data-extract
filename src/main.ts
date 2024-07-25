@@ -1,6 +1,6 @@
 import { PlaywrightCrawler, RequestQueue } from 'crawlee';
 import { connectToDatabase, closeDatabase, getPendingProperties,
-  createProperty, updateProperty } from './mongodb.js';
+  createProperty, updateProperty, getProperty } from './mongodb.js';
 
 async function runCrawler() {
   await connectToDatabase();
@@ -83,6 +83,13 @@ async function runCrawler() {
 
           if (link?.includes('/properties/')) {
             log.info(`Property link detected: ${link}`);
+            
+            // check if property already exists in database
+            const existingProperty = await getProperty(link);
+            if (existingProperty) {
+              log.warning(`Property already exists: ${link}`);
+              continue;
+            }
 
             // save Property links into database
             const property = await createProperty({
@@ -288,26 +295,29 @@ async function runCrawler() {
         console.log(property);
 
         const result = await updateProperty(property);
-        console.log(`${result.matchedCount} matched | ${result.modifiedCount} updated`);
+        log.info(`${result.matchedCount} matched | ${result.modifiedCount} updated`);
       }
     },
-    maxRequestsPerCrawl: 300,
+    maxRequestsPerCrawl: 1000,
     maxConcurrency: 1,
     headless: false,
   });
 
   // get PENDING properties from mongodb
-  const properties = await getPendingProperties();
+  const pendingProperties = await getPendingProperties();
+  console.log(`== Properties to crawl: ${pendingProperties.length}`);
 
   // put all properties urls into an array
-  const propertyUrls = properties.map((property) => base_url + property.url);
+  const propertyUrls = pendingProperties.map((property) => base_url + property.url);
   if (propertyUrls.length > 0) {
+    console.log('== Crawling PENDING properties...');
     await crawler.run(propertyUrls);
   }
   
+  console.log('== Crawling NEW properties...');
   await crawler.run([starting_url]);
   
-  console.log('Crawler finished.');
+  console.log('== Crawler finished.');
   await closeDatabase();
 }
 
